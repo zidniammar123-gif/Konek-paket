@@ -3,153 +3,139 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>P2P File Transfer dengan Login Perangkat</title>
-    <script src="https://unpkg.com"></script>
+    <title>Eksperimen P2P - Login Google & Dashboard</title>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; background: #f4f4f9; }
-        .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        input, button { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border-radius: 5px; border: 1px solid #ccc; }
-        button { background: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; }
-        button:hover { background: #0056b3; }
-        .status { font-weight: bold; color: #28a745; margin: 10px 0; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; text-align: center; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        button { background: #4285F4; color: white; border: none; padding: 12px 24px; font-size: 16px; font-weight: bold; border-radius: 5px; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #357ae8; }
         .hidden { display: none; }
+        .user-card { background: #eef2f7; padding: 10px; margin: 10px 0; border-radius: 8px; text-align: left; display: flex; align-items: center; gap: 15px; }
+        .user-card img { width: 40px; height: 40px; border-radius: 50%; }
+        .logout-btn { background: #dc3545; font-size: 14px; padding: 8px 15px; margin-top: 20px; }
+        .logout-btn:hover { background: #c82333; }
+        hr { border: 0; height: 1px; background: #ddd; margin: 20px 0; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Lokal Share (P2P)</h2>
-
-    <!-- BAGIAN 1: HALAMAN LOGIN / MASUKKAN NAMA PERANGKAT -->
-    <div id="login-section">
-        <h3>Masuk ke Perangkat</h3>
-        <p>Beri nama perangkat ini agar mudah dikenali:</p>
-        <input type="text" id="device-name-input" placeholder="Contoh: LaptopKantor">
-        <button onclick="loginDevice()">Masuk / Login 🔑</button>
-    </div>
-
-    <!-- BAGIAN 2: HALAMAN UTAMA (MUNCUL SETELAH LOGIN) -->
-    <div id="main-section" class="hidden">
-        <p>Nama Perangkat Anda:</p>
-        <h3 id="my-device-name" style="color: #007bff;">-</h3>
-        
-        <hr>
-        
-        <p><strong>Kirim File ke Perangkat Lain:</strong></p>
-        <input type="text" id="peer-id-input" placeholder="Masukkan Nama Perangkat Tujuan">
-        <input type="file" id="file-input">
-        <button onclick="sendFile()">Kirim File 🚀</button>
-        
-        <button onclick="logoutDevice()" style="background: #dc3545; margin-top: 20px;">Ganti Nama / Keluar</button>
-    </div>
+    <h2>🌐 P2P Share: Dashboard Publik</h2>
     
-    <div class="status" id="status-msg"></div>
+    <!-- HALAMAN BELUM LOGIN -->
+    <div id="login-section">
+        <p>Silakan masuk menggunakan akun Google Anda untuk mendaftarkan perangkat ke dashboard publik.</p>
+        <button id="btn-login">Masuk dengan Google 🚀</button>
+    </div>
+
+    <!-- HALAMAN SETELAH LOGIN -->
+    <div id="main-section" class="hidden">
+        <div style="background: #e8f5e9; padding: 10px; border-radius: 8px; margin-bottom: 20px;">
+            <p style="margin: 0; color: #2e7d32;"><strong>Status:</strong> Anda berhasil masuk!</p>
+            <p id="user-info" style="margin: 5px 0 0 0; font-weight: bold;"></p>
+        </div>
+        
+        <button id="btn-logout" class="logout-btn">Keluar / Logout</button>
+    </div>
+
+    <hr>
+
+    <!-- DASHBOARD PUBLIK (BISA DILIHAT SIAPAPUN) -->
+    <h3>👥 Perangkat / Email yang Aktif (Publik):</h3>
+    <div id="dashboard-list">Memuat daftar perangkat...</div>
 </div>
 
-<script>
-    let peer = null;
-    let conn = null;
+<!-- Memuat SDK Firebase secara Modular -->
+<script type="module">
+    import { initializeApp } from "https://gstatic.com";
+    import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://gstatic.com";
+    import { getFirestore, doc, setDoc, collection, onSnapshot } from "https://gstatic.com";
 
-    // Cek apakah sebelumnya sudah pernah login di browser ini
-    window.onload = function() {
-        const savedName = localStorage.getItem('p2p_custom_device_name');
-        if (savedName) {
-            document.getElementById('device-name-input').value = savedName;
-            loginDevice(); // Auto login jika sudah ada data tersimpan
-        }
+    // 1. Masukkan Konfigurasi Firebase Anda di bawah ini
+    const firebaseConfig = {
+        // PASTE_KONFIGURASI_FIREBASE_ANDA_DI_SINI
+        // Contoh format:
+        // apiKey: "AIzaSy...",
+        // authDomain: "://firebaseapp.com",
+        // projectId: "proyek-anda",
+        // storageBucket: "://appspot.com",
+        // messagingSenderId: "12345678",
+        // appId: "1:1234:web:abcd"
     };
 
-    // Fungsi saat tombol Login diklik
-    function loginDevice() {
-        const deviceName = document.getElementById('device-name-input').value.trim();
-        
-        if (!deviceName) {
-            alert("Harap masukkan nama perangkat!");
-            return;
-        }
+    // Inisialisasi Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const provider = new GoogleAuthProvider();
 
-        // Simpan nama ke localStorage agar diingat
-        localStorage.setItem('p2p_custom_device_name', deviceName);
+    const loginSection = document.getElementById('login-section');
+    const mainSection = document.getElementById('main-section');
+    const btnLogin = document.getElementById('btn-login');
+    const btnLogout = document.getElementById('btn-logout');
+    const userInfo = document.getElementById('user-info');
+    const dashboardList = document.getElementById('dashboard-list');
 
-        // Inisialisasi PeerJS dengan ID kustom sesuai nama perangkat
-        // Catatan: Nama harus unik secara global di server PeerJS
-        peer = new Peer(deviceName);
-
-        peer.on('open', (id) => {
-            document.getElementById('login-section').classList.add('hidden');
-            document.getElementById('main-section').classList.remove('hidden');
-            document.getElementById('my-device-name').innerText = id;
-            document.getElementById('status-msg').innerText = "Berhasil masuk! Siap menerima/mengirim file.";
-            initPeerEvents();
-        });
-
-        peer.on('error', (err) => {
-            if (err.type === 'unavailable-id') {
-                alert("Nama perangkat sudah digunakan orang lain, silakan pakai nama lain!");
-            } else {
-                alert("Terjadi kesalahan koneksi: " + err.type);
-            }
-        });
-    }
-
-    // Fungsi Logout / Ganti Nama
-    function logoutDevice() {
-        localStorage.removeItem('p2p_custom_device_name');
-        if (peer) peer.destroy();
-        document.getElementById('main-section').classList.add('hidden');
-        document.getElementById('login-section').classList.remove('hidden');
-        document.getElementById('status-msg').innerText = "";
-    }
-
-    // Fungsi Menerima File & Event Koneksi
-    function initPeerEvents() {
-        peer.on('connection', (connection) => {
-            conn = connection;
-            document.getElementById('status-msg').innerText = "Terhubung dengan perangkat lain!";
+    // 2. FUNGSI LOGIN GOOGLE
+    btnLogin.addEventListener('click', async () => {
+        try {
+            const result = await signInWithPopup(auth, provider);
+            const user = result.user;
             
-            conn.on('data', (data) => {
-                if (data.file) {
-                    const blob = new Blob([data.file], { type: data.fileType });
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(blob);
-                    link.download = data.fileName;
-                    link.click();
-                    document.getElementById('status-msg').innerText = `File "${data.fileName}" diterima!`;
-                }
+            // Simpan data user ke Database Firestore setelah login berhasil
+            await setDoc(doc(db, "active_devices", user.uid), {
+                name: user.displayName,
+                email: user.email,
+                photo: user.photoURL,
+                lastSeen: new Date()
             });
-        });
-    }
+        } catch (error) {
+            console.error("Gagal Login:", error);
+            alert("Gagal login menggunakan Google. Pastikan web dijalankan di server lokal (bukan file:///).");
+        }
+    });
 
-    // Fungsi Mengirim File
-    function sendFile() {
-        const targetId = document.getElementById('peer-id-input').value.trim();
-        const fileInput = document.getElementById('file-input');
-        const file = fileInput.files;
+    // 3. FUNGSI LOGOUT
+    btnLogout.addEventListener('click', () => {
+        signOut(auth);
+    });
 
-        if (!targetId || !file) {
-            alert("Masukkan nama perangkat tujuan dan pilih file!");
+    // 4. PANTAU STATUS LOGIN USER
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            loginSection.classList.add('hidden');
+            mainSection.classList.remove('hidden');
+            userInfo.innerText = `${user.displayName} (${user.email})`;
+        } else {
+            loginSection.classList.remove('hidden');
+            mainSection.classList.add('hidden');
+        }
+    });
+
+    // 5. TAMPILKAN DASHBOARD PUBLIK SECARA REAL-TIME
+    // Mengambil data dari Firestore secara otomatis setiap ada perubahan
+    onSnapshot(collection(db, "active_devices"), (snapshot) => {
+        dashboardList.innerHTML = "";
+        if (snapshot.empty) {
+            dashboardList.innerHTML = "<p style='color: #777;'>Belum ada perangkat yang aktif.</p>";
             return;
         }
-
-        document.getElementById('status-msg').innerText = "Menghubungkan ke " + targetId + "...";
-        conn = peer.connect(targetId);
-
-        conn.on('open', () => {
-            document.getElementById('status-msg').innerText = "Mengirim file...";
-            conn.send({
-                file: file,
-                fileName: file.name,
-                fileType: file.type
-            });
-            document.getElementById('status-msg').innerText = `File "${file.name}" berhasil terkirim!`;
+        
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            const card = document.createElement('div');
+            card.className = 'user-card';
+            card.innerHTML = `
+                <img src="${data.photo || 'https://placeholder.com'}" alt="Foto">
+                <div>
+                    <strong>${data.name}</strong><br>
+                    <small style="color: #555;">Email: ${data.email}</small>
+                </div>
+            `;
+            dashboardList.appendChild(card);
         });
-
-        conn.on('error', (err) => {
-            document.getElementById('status-msg').innerText = "Gagal terkirim. Perangkat tujuan tidak aktif/salah nama.";
-        });
-    }
+    });
 </script>
 
 </body>
-  </html>
-          
+</html>
