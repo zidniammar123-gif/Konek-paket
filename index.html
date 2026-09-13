@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P File Transfer dengan Login Perangkat</title>
+    <script src="https://unpkg.com"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; background: #f4f4f9; }
+        .container { max-width: 400px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        input, button { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; border-radius: 5px; border: 1px solid #ccc; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0056b3; }
+        .status { font-weight: bold; color: #28a745; margin: 10px 0; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Lokal Share (P2P)</h2>
+
+    <!-- BAGIAN 1: HALAMAN LOGIN / MASUKKAN NAMA PERANGKAT -->
+    <div id="login-section">
+        <h3>Masuk ke Perangkat</h3>
+        <p>Beri nama perangkat ini agar mudah dikenali:</p>
+        <input type="text" id="device-name-input" placeholder="Contoh: LaptopKantor">
+        <button onclick="loginDevice()">Masuk / Login 🔑</button>
+    </div>
+
+    <!-- BAGIAN 2: HALAMAN UTAMA (MUNCUL SETELAH LOGIN) -->
+    <div id="main-section" class="hidden">
+        <p>Nama Perangkat Anda:</p>
+        <h3 id="my-device-name" style="color: #007bff;">-</h3>
+        
+        <hr>
+        
+        <p><strong>Kirim File ke Perangkat Lain:</strong></p>
+        <input type="text" id="peer-id-input" placeholder="Masukkan Nama Perangkat Tujuan">
+        <input type="file" id="file-input">
+        <button onclick="sendFile()">Kirim File 🚀</button>
+        
+        <button onclick="logoutDevice()" style="background: #dc3545; margin-top: 20px;">Ganti Nama / Keluar</button>
+    </div>
+    
+    <div class="status" id="status-msg"></div>
+</div>
+
+<script>
+    let peer = null;
+    let conn = null;
+
+    // Cek apakah sebelumnya sudah pernah login di browser ini
+    window.onload = function() {
+        const savedName = localStorage.getItem('p2p_custom_device_name');
+        if (savedName) {
+            document.getElementById('device-name-input').value = savedName;
+            loginDevice(); // Auto login jika sudah ada data tersimpan
+        }
+    };
+
+    // Fungsi saat tombol Login diklik
+    function loginDevice() {
+        const deviceName = document.getElementById('device-name-input').value.trim();
+        
+        if (!deviceName) {
+            alert("Harap masukkan nama perangkat!");
+            return;
+        }
+
+        // Simpan nama ke localStorage agar diingat
+        localStorage.setItem('p2p_custom_device_name', deviceName);
+
+        // Inisialisasi PeerJS dengan ID kustom sesuai nama perangkat
+        // Catatan: Nama harus unik secara global di server PeerJS
+        peer = new Peer(deviceName);
+
+        peer.on('open', (id) => {
+            document.getElementById('login-section').classList.add('hidden');
+            document.getElementById('main-section').classList.remove('hidden');
+            document.getElementById('my-device-name').innerText = id;
+            document.getElementById('status-msg').innerText = "Berhasil masuk! Siap menerima/mengirim file.";
+            initPeerEvents();
+        });
+
+        peer.on('error', (err) => {
+            if (err.type === 'unavailable-id') {
+                alert("Nama perangkat sudah digunakan orang lain, silakan pakai nama lain!");
+            } else {
+                alert("Terjadi kesalahan koneksi: " + err.type);
+            }
+        });
+    }
+
+    // Fungsi Logout / Ganti Nama
+    function logoutDevice() {
+        localStorage.removeItem('p2p_custom_device_name');
+        if (peer) peer.destroy();
+        document.getElementById('main-section').classList.add('hidden');
+        document.getElementById('login-section').classList.remove('hidden');
+        document.getElementById('status-msg').innerText = "";
+    }
+
+    // Fungsi Menerima File & Event Koneksi
+    function initPeerEvents() {
+        peer.on('connection', (connection) => {
+            conn = connection;
+            document.getElementById('status-msg').innerText = "Terhubung dengan perangkat lain!";
+            
+            conn.on('data', (data) => {
+                if (data.file) {
+                    const blob = new Blob([data.file], { type: data.fileType });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = data.fileName;
+                    link.click();
+                    document.getElementById('status-msg').innerText = `File "${data.fileName}" diterima!`;
+                }
+            });
+        });
+    }
+
+    // Fungsi Mengirim File
+    function sendFile() {
+        const targetId = document.getElementById('peer-id-input').value.trim();
+        const fileInput = document.getElementById('file-input');
+        const file = fileInput.files;
+
+        if (!targetId || !file) {
+            alert("Masukkan nama perangkat tujuan dan pilih file!");
+            return;
+        }
+
+        document.getElementById('status-msg').innerText = "Menghubungkan ke " + targetId + "...";
+        conn = peer.connect(targetId);
+
+        conn.on('open', () => {
+            document.getElementById('status-msg').innerText = "Mengirim file...";
+            conn.send({
+                file: file,
+                fileName: file.name,
+                fileType: file.type
+            });
+            document.getElementById('status-msg').innerText = `File "${file.name}" berhasil terkirim!`;
+        });
+
+        conn.on('error', (err) => {
+            document.getElementById('status-msg').innerText = "Gagal terkirim. Perangkat tujuan tidak aktif/salah nama.";
+        });
+    }
+</script>
+
+</body>
+  </html>
+          
